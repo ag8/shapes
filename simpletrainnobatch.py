@@ -18,7 +18,69 @@ import Flags
 
 FLAGS = None
 
+def index_the_database_into_queue2(image_path, shuffle):
+    """Indexes av4 database and returns two lists of filesystem path: ligand files, and protein files.
+        Ligands are assumed to end with _ligand.av4, proteins should be in the same folders with ligands.
+        Each protein should have its own folder named similarly to the protein name (in the PDB)."""
 
+
+    # STEP 1: GET LIST OF KEY AND LOCK FILES
+
+
+    key_file_list = []
+    lock_file_list = []
+
+    print("Number of keys:", len(glob(os.path.join(image_path + '', "*[_]*L.png"))))
+
+    for key_image in glob(os.path.join(image_path + '', "*[_]*L.png")):
+        # print(key_image)
+
+        lock_image = key_image.replace('L', 'K')
+
+        if os.path.exists(lock_image):
+            key_file_list.append(key_image)
+            lock_file_list.append(lock_image)
+        else:
+            print("Could not find lock for key ", key_image)
+
+    index_list = range(len(key_file_list))
+    examples_in_database = len(index_list)
+
+    if examples_in_database == 0:
+        raise Exception('No files found in the image path:', image_path)
+
+    print("Number of indexed key-lock pairs in the database:", examples_in_database)
+
+    # create a filename queue (tensor) with the names of the keys and locks
+    index_tensor = tf.convert_to_tensor(index_list, dtype=tf.int32)
+    key_files = tf.convert_to_tensor(key_file_list, dtype=tf.string)
+    lock_files = tf.convert_to_tensor(lock_file_list, dtype=tf.string)
+
+    print("Lengths:", index_tensor.get_shape(), ", ", key_files.get_shape(), ", ", lock_files.get_shape())
+
+
+
+    # STEP 2: MAKE LIST OF MATCHING/NOT MATCHING ISNTRUCTIONS
+
+    probability_of_match = 0.5
+    match_or_not_list = np.random.choice([0, 1], size=(50000,), p=[1 - probability_of_match, probability_of_match])
+
+    match_or_not = tf.convert_to_tensor(match_or_not_list, dtype=tf.bool)
+
+
+
+
+
+    filename_queue = tf.train.slice_input_producer([index_tensor, key_files, lock_files], num_epochs=None,
+                                                   shuffle=shuffle)
+    # filename_queue = [index_list, key_file_list, lock_file_list]
+
+    # rsq = tf.RandomShuffleQueue(50000, 0, [tf.int32, tf.string, tf.string, tf.bool], shapes=[[], [], [], []])
+    # do_enqueues = rsq.enqueue_many([index_tensor, key_files, lock_files, match_or_not])
+
+    # index, key_file, lock_file, match = rsq.dequeue()
+
+    return filename_queue
 
 def index_the_database_into_queue(image_path, shuffle):
     """Indexes av4 database and returns two lists of filesystem path: ligand files, and protein files.
@@ -96,9 +158,23 @@ def random_but_not((min, max), avoid):
     return chosen
 
 
+def image_and_label_queue2(lock_image_files_queue):
+    """Creates shuffle queue for training the network"""
+
+    reader = tf.WholeFileReader()
+    keyA, valueA = reader.read(lock_image_files_queue)
+    my_imgA = tf.image.decode_png(valueA)
+    lock_image = tf.image.decode_png(my_imgA)
+
+    return (lock_image_num, label, combined_image)
+
 
 def image_and_label_queue(batch_size, num_threads, index, key_file, lock_file, match, train=True):
     """Creates shuffle queue for training the network"""
+
+
+    reader = tf.WholeFileReader()
+
 
     print("Getting index")
 
@@ -107,22 +183,31 @@ def image_and_label_queue(batch_size, num_threads, index, key_file, lock_file, m
     print("Got index")
 
     print("Getting lock image")
-    lock_image = tf.image.decode_png(lock_file)
-    key_image = None
+    keyA, valueA = reader.read(lock_file)
+    my_imgA = tf.image.decode_png(valueA)
+    lock_image = tf.image.decode_png(my_imgA)
+    # key_image = None
     print("Got lock image")
 
     match_or_not = match  # Determine whether the key should match the lock or not
     print("Got matchornot")
 
-    if match_or_not == 1:
-        print("Setting up true matchornot")
-        key_image = tf.image.decode_png(key_file)
-        print("Got matching key image")
-    else:
-        print("Setting up false matchornot")
-        new_key_file = key_file + "abc"
-        key_image = tf.image.decode_png(new_key_file)
-        print("Got non-matching key image")
+
+    key, value = reader.read(key_file)
+
+    my_img = tf.image.decode_png(value)  # use png or jpg decoder based on your files.
+
+    key_image = tf.image.decode_png(my_img, channels=0, dtype=tf.uint8)
+
+    # if match_or_not == 1:
+    #     print("Setting up true matchornot")
+    #     key_image = tf.image.decode_png(key_file, channels=0, dtype=tf.uint8)
+    #     print("Got matching key image")
+    # else:
+    #     print("Setting up false matchornot")
+    #     new_key_file = key_file  # TODO: CHOOSE RANDOM ONE INSTEAD!
+    #     key_image = tf.image.decode_png(key_file, channels=0, dtype=tf.uint8)
+    #     print("Got non-matching key image")
 
     print("Combining images")
     combined_image = tf.stack([lock_image, key_image], axis=1)
@@ -148,7 +233,7 @@ def main(_):
     sess = tf.Session()
 
     # Get a filename queue
-    do_enqueues, index_queue, key_file_queue, lock_file_queue, match, examples_in_database = index_the_database_into_queue(Flags.image_path, shuffle=True)
+    filequeue = index_the_database_into_queue(Flags.image_path, shuffle=True)
 
     print("Gotten filename queue.")
 
