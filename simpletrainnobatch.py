@@ -3,17 +3,15 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
-import sys
 import os
+import sys
 from glob import glob
 from random import randint
+
 import numpy as np
-
-from tensorflow.examples.tutorials.mnist import input_data
-
 import tensorflow as tf
 
-import Flags
+from shape_generation import Flags
 
 
 FLAGS = None

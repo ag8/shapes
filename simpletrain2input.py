@@ -1,11 +1,12 @@
+from __future__ import print_function
+
 import os
 from glob import glob
 
+import numpy as np
 import tensorflow as tf
 
-import numpy as np
-
-import Flags
+from shape_generation import Flags
 
 
 
@@ -76,6 +77,11 @@ def database_to_filename_queue(images_path, shuffle=True):
     lock_files = tf.convert_to_tensor(lock_file_list, dtype=tf.string)
     match_or_not = tf.convert_to_tensor(match_or_not_list, dtype=tf.bool)
 
+
+    print("index tensor", index_tensor)
+    print(key_files)
+    print(lock_files)
+    print(match_or_not)
     # Now, we generate a queue based on the four tensors we made from the lists above
     filename_queue = tf.train.slice_input_producer([index_tensor, key_files, lock_files, match_or_not], num_epochs=None,
                                                    shuffle=shuffle)
@@ -84,15 +90,13 @@ def database_to_filename_queue(images_path, shuffle=True):
 
 
 
-def filename_queue_to_image_and_label_queue(filename_queue, epoch_counter, batch_size=Flags.batch_size,
+def filename_queue_to_image_and_label_queue(filename_queue, batch_size=Flags.batch_size,
                                             num_threads=Flags.num_threads):
     """Creates a queue of images and labels based on the filename/matching queue
 
         Args:
           filename_queue: The filename/matching queue
                         that images will be taken from.
-
-          epoch_counter: The epoch counter.
 
           batch_size: (Optional). The size of the batches
                         to be generated. Defaults to
@@ -102,21 +106,30 @@ def filename_queue_to_image_and_label_queue(filename_queue, epoch_counter, batch
                         to be used. Defaults to number
                         listed in Flags.
 
+        Returns:
+            A multithread batch
+
     """
 
-    # read one receptor and stack of ligands; choose one of the ligands from the stack according to epoch
-    ligand_file, current_epoch, label, ligand_elements, ligand_coords, receptor_elements, receptor_coords = read_receptor_and_ligand(
-        filename_queue, epoch_counter=epoch_counter, lig_frame_sampling=lig_frame_sampling)
+    # Get the key image and lock image, as well as the label that says whether they match or not
+    key_image, lock_image, label = read_receptor_and_ligand(filename_queue)
 
-    # convert coordinates of ligand and protein into an image
-    dense_image, _, _ = complex_coords_to_image(ligand_elements, ligand_coords, receptor_elements, receptor_coords,
-                                                side_pixels, pixel_size)
+    # key_image = tf.reshape(key_image, [30000, ])
+    # lock_image = tf.reshape(lock_image, [30000, ])
 
-    # create a batch of proteins and ligands to read them together
-    multithread_batch = tf.train.batch([ligand_file, current_epoch, label, dense_image], batch_size,
+    # TODO: Use tf.read_file() to avoid reading everything into memory
+    print("Key image shape:", key_image.get_shape())
+    print("Lock image shape:", lock_image.get_shape())
+
+    # Combine (stack) the lock and key into one image
+    combined_image = tf.concat([lock_image, key_image], axis=0)
+
+    print("Combined image shape:", combined_image.get_shape())
+
+    # create a batch of locks and keys to read them together
+    multithread_batch = tf.train.batch([key_image, label], batch_size,
                                        num_threads=num_threads,
-                                       capacity=batch_size * 3, dynamic_pad=True,
-                                       shapes=[[], [], [], [side_pixels, side_pixels, side_pixels]])
+                                       capacity=batch_size * 3, dynamic_pad=False)
 
     return multithread_batch
 
@@ -137,7 +150,7 @@ def read_receptor_and_ligand(filename_queue):
     """
 
     # Get id, key file, lock file, and label
-    # values from the filname queue
+    # values from the filename queue
     id_value  = filename_queue[0]
     key_file  = filename_queue[1]
     lock_file = filename_queue[2]
@@ -166,17 +179,22 @@ def decode_image(file_path):
 
     """
 
+    return tf.read_file(file_path)
+
+
     # Create a small filename queue, containing just the image
     # we're going to read (This is probably quite inefficient,
     #   especially given the large number of images we're
     #   dealing with. Improvements welcome)
-    filename_queue = tf.train.string_input_producer([file_path])
+    # filename_queue = tf.train.string_input_producer([file_path])
 
     # Read in the file
-    reader = tf.WholeFileReader()
-    key, value = reader.read(filename_queue)
+    # reader = tf.WholeFileReader()
+    # key, value = reader.read(filename_queue)
 
     # Decode the image into a tensor
-    image_tensor = tf.image.decode_png(value)
+    # image_tensor = tf.image.decode_png(value)
 
-    return image_tensor
+    # print("Image tensor shape:", image_tensor.get_shape())
+
+    # return image_tensor

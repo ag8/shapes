@@ -1,0 +1,9 @@
+IMAGE_NUM = 50000
+
+
+DIM = 100
+
+COLOR = (0, 128, 0)
+RANDOM_COLOR = False
+
+ROTATE = False

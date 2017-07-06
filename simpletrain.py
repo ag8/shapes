@@ -3,17 +3,15 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
-import sys
 import os
+import sys
 from glob import glob
 from random import randint
+
 import numpy as np
-
-from tensorflow.examples.tutorials.mnist import input_data
-
 import tensorflow as tf
 
-import Flags
+from shape_generation import Flags
 
 
 FLAGS = None
@@ -148,7 +146,8 @@ def main(_):
     sess = tf.Session()
 
     # Get a filename queue
-    do_enqueues, index_queue, key_file_queue, lock_file_queue, match, examples_in_database = index_the_database_into_queue(Flags.image_path, shuffle=True)
+    do_enqueues, index_queue, key_file_queue, lock_file_queue, match, examples_in_database = index_the_database_into_queue(
+        Flags.image_path, shuffle=True)
 
     print("Gotten filename queue.")
 

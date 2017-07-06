@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="53faf63c-eac4-4e2e-97e8-b42e865f7d4a" name="Titan" url="http://titan.cba.mit.edu">
+        <fileTransfer host="titan.cba.mit.edu" port="22" rootFolder="/home/maksym/ag" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

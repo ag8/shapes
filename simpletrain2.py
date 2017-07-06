@@ -4,21 +4,16 @@ from __future__ import print_function
 
 import argparse
 import sys
-import os
-from glob import glob
-from random import randint
-import numpy as np
-
-import simpletrain2input as st2i
-
-from tensorflow.examples.tutorials.mnist import input_data
 
 import tensorflow as tf
 
-import Flags
+import simpletrain2input as st2i
+from shape_generation import Flags
+
 
 
 def main(_):
+    # Make logging very verbose
     tf.logging.set_verbosity(tf.logging.DEBUG)
 
 
@@ -27,20 +22,17 @@ def main(_):
     # Get a filename queue
     filequeue = st2i.database_to_filename_queue(Flags.image_path, shuffle=True)
 
+    print("File queue: ", filequeue)
+
     # Now, from the filename queue, get queues of combined shape images and labels
-    num, image_batch, label_batch = image_and_label_queue(batch_size=Flags.batch_size,
-                                                          num_threads=Flags.num_threads,
-                                                          index=index_queue,
-                                                          key_file=key_file_queue,
-                                                          lock_file=lock_file_queue,
-                                                          match=match)
+    image_batch, label_batch = st2i.filename_queue_to_image_and_label_queue(filequeue)
 
 
 
     # Generate the data placeholders
 
-    x = tf.placeholder(tf.float32, [None, None])
-    W = tf.Variable(tf.zeros([100, 2]))
+    x = tf.placeholder(tf.float32, [None, 60000])
+    W = tf.Variable(tf.zeros([60000, 2]))
     b = tf.Variable(tf.zeros([2]))
     y = tf.matmul(x, W) + b
 
@@ -64,6 +56,8 @@ def main(_):
 
     # Train!
     for _ in range(1000):
+        print("Image batch shape:", image_batch.get_shape())
+
         batch_xs, batch_ys = sess.run([image_batch, label_batch])
         sess.run(train_step, feed_dict={x: batch_xs, y_: batch_ys})
 
