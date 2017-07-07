@@ -89,7 +89,7 @@ def train():
 
 
 
-def main(argv=None):  # TODO: Verify the data set!!!
+def main(argv=None):
     print("Hello, world!")
 
     notify("Hello, world!", subject="Hi!!!")

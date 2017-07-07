@@ -13,7 +13,7 @@ if get_hostname() == "lebennin-vm":
 
 # Download and extract the dataset if it's missing
 print("Setting up dataset...")
-# maybe_download_and_extract()
+maybe_download_and_extract()
 print("Done.")
 
 # Run some checks on the dataset to make sure it's correct
@@ -32,7 +32,7 @@ print("Done.")
 
 # Get images and labels for MSHAPES
 print("Setting up getting batches and labels")
-images_batch, labels_batch = st4.inputs(eval_data=False)
+enqueues, images_batch, labels_batch = st4.inputs(eval_data=False)
 print("Got two batches")
 
 print("Image batch shape: ")
@@ -53,6 +53,9 @@ with tf.Session(config=tf.ConfigProto(log_device_placement=False, operation_time
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(coord=coord, sess=sess)
     print("Ok")
+
+    # enqueue everything as needed
+    sess.run(enqueues)
 
     for i in xrange(0, 5):
         print("blah")

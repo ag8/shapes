@@ -23,54 +23,46 @@ NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 10000
 
 
 
-def read_mshapes(lock_queue, key_queue, match_queue):
+def read_mshapes(filename_queue):
     """
-    This function returns a combined lock/key image and a label
-    given a lock queue, a key queue, and a queue that stores
-    whether the lock and the key match.
+    Reads a pair of MSHAPE records from the filename queue.
 
-    :param lock_queue: a filequeue of the lock image files
-    :param key_queue: a filequeue of the key image files
-    :param match_queue: a queue that states whether the lock and the key match
+    :param filename_queue: the filename queue of lock/key files.
+    :return: a duple containing a correct example and an incorrect example
+    """
+    file_pair1 = filename_queue.dequeue()
+    file_pair2 = filename_queue.dequeue()
 
-    :return: an MShapeRecord containing the combined image and the label
+    _, key_image = decode_mshapes(file_pair1[1])
+    _, lock_image = decode_mshapes(file_pair1[0])
+    _, wrong_key_image = decode_mshapes(file_pair2[1])  # The key from the next pair in the queue
+    # will not match the current lock
+
+    # Combine images to make a correct example and an incorrect example
+    correct_example = tf.concat([lock_image, key_image], axis=0)
+    wrong_example = tf.concat([lock_image, wrong_key_image], axis=0)
+
+    # Return the examples
+    return correct_example, wrong_example
+
+
+
+def decode_mshapes(file_path):
+    """
+    Decodes an MSHAPE record.
+
+    :param file_path: The filepath of the png
+    :return: A duple containing 0 and the decoded image tensor
     """
 
+    # read the whole file
+    serialized_record = tf.read_file(file_path)
 
-    class MShapeRecord(object):
-        pass
+    # decode everything into int32
+    image = tf.image.decode_png(serialized_record)
 
+    return 0, image
 
-    # Create a WholeFileReader to read in the images
-    image_reader = tf.WholeFileReader()
-
-    # Read a whole file from the queue.
-    # The first returned value is the filename,
-    # which we can safely ignore
-    _, lock_image_file = image_reader.read(lock_queue)
-    _, key_image_file = image_reader.read(key_queue)
-
-    # Decode the image as a PNG.
-    # This will turn the image into a tensor,
-    # which we can then use in training.
-    # TODO: Read in as B/W (so as not to learn color matching)
-    lock_image = tf.image.decode_png(lock_image_file)
-    key_image = tf.image.decode_png(key_image_file)
-
-    # Concatenate the lock tensor and the key tensor into one tensor
-    image = tf.concat([lock_image, key_image], axis=1)
-
-    # Write the image/label to an MShapeRecord-type object
-    read_input = MShapeRecord()
-
-    read_input.uint8image = image
-    read_input.label = match_queue.dequeue()
-    # read_input.label = tf.convert_to_tensor([1])
-    print("Label in read function:", read_input.label)
-    # read_input.label.set_shape([1])
-    # print("Label in read function:", read_input.label)
-
-    return read_input
 
 
 def inputs(eval_data, data_dir, batch_size):
@@ -86,83 +78,41 @@ def inputs(eval_data, data_dir, batch_size):
         labels: Labels. 1D tensor of [batch_size] size.
     """
 
-    match_or_not = np.random.choice(2, 100000)
+    filequeue = tf.FIFOQueue(capacity=100000, dtypes=[tf.string, tf.string])  # FIXME: Use RandomShuffleQueue instead!!
+    enqueues = []
 
     if not eval_data:
-        locks = []
-        keys = []
+        print("Not eval data")
+        for i in xrange(1, 5000):  # TODO: First of all, this should go to (at least) 30000.
+                                # The reason it's at 5000 is that currently, we're
+                                # individually enqueueing images. Instead, we should
+                                # use enqueue_many with an inline for loop, which
+                                # should building up the queue much faster.
+            # print(i)
+            if (i % 1000 == 1):
+                print(i)
+            lock = os.path.join(data_dir, 'images/%d_L.png' % i)
+            key = os.path.join(data_dir, 'images/%d_K.png' % i)
 
-        for i in xrange(1, 30000):
-            match = match_or_not[i]
-
-            locks.append(os.path.join(data_dir, 'images/%d_L.png' % i))
-
-            if match == 0:
-                j = randint(1, 29999)  # TODO: Make sure i is not randomly picked by accident
-            else:
-                j = i + 0
-
-            keys.append(os.path.join(data_dir, 'images/%d_K.png' % j))
+            a = filequeue.enqueue([lock, key])
+            enqueues.append(a)
 
         num_examples_per_epoch = NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN
+        print("Ok")
     else:
-        locks = []
-        keys = []
-
         for i in xrange(30001, 49500):
-            match = match_or_not[i]
+            lock = os.path.join(data_dir, 'images/%d_L.png' % i)
+            key = os.path.join(data_dir, 'images/%d_K.png' % i)
 
-            locks.append(os.path.join(data_dir, 'images/%d_L.png' % i))
-
-            if match == 0:
-                j = randint(30001, 49500)  # TODO: Make sure i is not randomly picked by accident
-            else:
-                j = i + 0
-
-            keys.append(os.path.join(data_dir, 'images/%d_K.png' % j))
+            a = filequeue.enqueue([lock, key])
+            enqueues.append(a)
 
         num_examples_per_epoch = NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN
 
-    for f in locks:
-        if not tf.gfile.Exists(f):
-            raise ValueError('Failed to find file: ' + f)
+    print("Finished enqueueing")
 
-    for f in keys:
-        if not tf.gfile.Exists(f):
-            raise ValueError('Failed to find file: ' + f)
-
-    # Create a queue that produces the filenames to read.
-    lock_queue = tf.train.string_input_producer(locks)
-    key_queue = tf.train.string_input_producer(keys)
-    match_queue = tf.FIFOQueue(capacity=10000, dtypes=tf.uint8)
-    match_queue.enqueue_many(match_or_not)
-
-    # Read examples from files in the filename queue.
-    read_input = read_mshapes(lock_queue, key_queue, match_queue)
-    reshaped_image = tf.cast(read_input.uint8image, tf.float32)
-
-    print("Acquired read_input.")
-
-    height = IMAGE_SIZE
-    width = IMAGE_SIZE
-
-    # Image processing for evaluation.
-    # Crop the central [height, width] of the image.
-    resized_image = tf.image.resize_image_with_crop_or_pad(reshaped_image,
-                                                           height, width)
-
-    # Subtract off the mean and divide by the variance of the pixels.
-    float_image = tf.image.per_image_standardization(resized_image)
-
-    print("Got the image and labels; now, setting the shape of tensors.")
-
-    # Set the shapes of tensors.
-    float_image.set_shape([height, width, 3])
-    read_input.label.set_shape([1])
-
-    print("Finished setting shapes of tensors.")
-
-    print("Label:", read_input.label)
+    # Get the correct and incorrect examples from files in the filename queue.
+    c, w = read_mshapes(filequeue)
 
     # Ensure that the random shuffling has good mixing properties.
     min_fraction_of_examples_in_queue = 0.4
@@ -170,9 +120,9 @@ def inputs(eval_data, data_dir, batch_size):
                              min_fraction_of_examples_in_queue)
 
     # Generate a batch of images and labels by building up a queue of examples.
-    return _generate_image_and_label_batch(float_image, read_input.label,
-                                           min_queue_examples, batch_size,
-                                           shuffle=False)
+    return enqueues, _generate_image_and_label_batch(c, 1,  # FIXME: Also add incorrect examples to the batch
+                                                     min_queue_examples, batch_size,
+                                                     shuffle=False)
 
 
 

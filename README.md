@@ -14,9 +14,12 @@ Edit flags in `shape_generation/nshapegenflags.py`:
 
 
 ## Shape training
-Current version: `simpletrain3.py`
-    (Seems to work, but I haven't beel able to test it on Titan yet)  
-Working on `simpletrain4`, which will merge several queues and prevent unnecessary errors
+Current version: `simpletrain4/train.py`
+
+Current development is undergoing in `simpletrain4/test.py`.  
+We're still getting an error: `ValueError: All shapes must be fully defined: [TensorShape([Dimension(None), Dimension(None), Dimension(None)]), TensorShape([])]`
+    
+See `simpletrain4/qt2.py` for a really simple example of how we're implementing the correct/wrong exampl generation. (Because that's the thing that seems to be broken in the main program right now)
 
 Some of the code based on Tensorflow CIFAR-10 example
 
@@ -26,5 +29,6 @@ Some of the code based on Tensorflow CIFAR-10 example
 
 * Tensorflow must be installed.
 * Install the following dependencies:
-    * `pip install termcolor colorama`
-    * `sudo apt-get install expect-dev`
+    * tensorflow
+    * `sudo apt-get install expect-dev python-numpy`
+    * `pip install six pillow requests termcolor keras colorama`
